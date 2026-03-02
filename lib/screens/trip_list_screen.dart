@@ -4,7 +4,7 @@ import '../core/storage.dart';
 import '../models/trip.dart';
 
 class TripListScreen extends StatefulWidget {
-  final String status;
+  final String status; // "Pending", "Ongoing", etc.
   const TripListScreen({super.key, required this.status});
 
   @override
@@ -23,11 +23,26 @@ class _TripListScreenState extends State<TripListScreen> {
     _trips = _fetchTrips();
   }
 
+  // ✅ Leaving date formatter
+  String _fmtDt(DateTime dt) {
+    final d = dt.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return "${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}";
+  }
+
   Future<List<Trip>> _fetchTrips() async {
     try {
-      final driverId = await Storage.getDriverId();
-      final list = await ApiService.getTrips(driverId, widget.status);
-      return list.map((e) => Trip.fromJson(e)).toList();
+      // ✅ Storage driverId might be String -> convert to int
+      final driverIdRaw = await Storage.getDriverId();
+
+      final int driverId = driverIdRaw is int
+          ? driverIdRaw
+          : int.parse(driverIdRaw.toString()); // works if Storage returns String
+
+      // ✅ ApiService returns List<dynamic> (ONLY data array)
+      final List<dynamic> list = await ApiService.getTrips(driverId, widget.status);
+
+      return list.map((e) => Trip.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       debugPrint("Error fetching trips: $e");
       return [];
@@ -42,6 +57,7 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Future<void> _startTrip(Trip trip) async {
     final controller = TextEditingController();
+
     final meter = await showDialog<int>(
       context: context,
       builder: (_) => AlertDialog(
@@ -52,11 +68,12 @@ class _TripListScreenState extends State<TripListScreen> {
           decoration: const InputDecoration(hintText: "Start Meter"),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
             onPressed: () {
               final value = int.tryParse(controller.text);
               Navigator.pop(context, value);
@@ -72,13 +89,17 @@ class _TripListScreenState extends State<TripListScreen> {
         final res = await ApiService.startTrip(trip.tripId, meter);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['success'] == true
-                ? "✅ Trip started successfully"
-                : "❌ Failed to start trip: ${res['message']}"),
+            content: Text(
+              res['success'] == true
+                  ? "✅ Trip started successfully"
+                  : "❌ Failed to start trip: ${res['message']}",
+            ),
           ),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
       } finally {
         await _refreshTrips();
       }
@@ -87,6 +108,7 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Future<void> _endTrip(Trip trip) async {
     final controller = TextEditingController();
+
     final meter = await showDialog<int>(
       context: context,
       builder: (_) => AlertDialog(
@@ -97,11 +119,12 @@ class _TripListScreenState extends State<TripListScreen> {
           decoration: const InputDecoration(hintText: "End Meter"),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
             onPressed: () {
               final value = int.tryParse(controller.text);
               Navigator.pop(context, value);
@@ -117,13 +140,17 @@ class _TripListScreenState extends State<TripListScreen> {
         final res = await ApiService.endTrip(trip.tripId, meter);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['success'] == true
-                ? "✅ Trip ended successfully"
-                : "❌ Failed to end trip: ${res['message']}"),
+            content: Text(
+              res['success'] == true
+                  ? "✅ Trip ended successfully"
+                  : "❌ Failed to end trip: ${res['message']}",
+            ),
           ),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
       } finally {
         await _refreshTrips();
       }
@@ -132,6 +159,11 @@ class _TripListScreenState extends State<TripListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ backend gives "Pending" (not PENDING), so normalize
+    final statusUpper = widget.status.trim().toUpperCase();
+    final isPending = statusUpper == "PENDING";
+    final isOngoing = statusUpper == "ONGOING";
+
     return FutureBuilder<List<Trip>>(
       future: _trips,
       builder: (_, snapshot) {
@@ -153,6 +185,11 @@ class _TripListScreenState extends State<TripListScreen> {
             itemCount: trips.length,
             itemBuilder: (_, index) {
               final trip = trips[index];
+
+              final btnEnabled = isPending || isOngoing;
+              final btnText = isPending ? "Start Trip" : "End Trip";
+              final btnColor = isPending ? primaryColor : accentColor;
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -163,25 +200,44 @@ class _TripListScreenState extends State<TripListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Vehicle: ${trip.vehicleNumber}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text("Customer: ${trip.customerName}", style: const TextStyle(color: Colors.black87)),
-                      Text("Phone: ${trip.customerPhone}", style: const TextStyle(color: Colors.black54)),
-                      Text("Route: ${trip.from} → ${trip.to}", style: const TextStyle(color: Colors.black87)),
+                      Text("Vehicle: ${trip.vehicleNumber}",
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text("Customer: ${trip.customerName}",
+                          style: const TextStyle(color: Colors.black87)),
+                      Text("Phone: ${trip.customerPhone}",
+                          style: const TextStyle(color: Colors.black54)),
+                      Text("Route: ${trip.from} → ${trip.to}",
+                          style: const TextStyle(color: Colors.black87)),
+
+                      const SizedBox(height: 6),
+
+                      // ✅ Leaving date only
+                      Text(
+                        "Leaving: ${_fmtDt(trip.leavingDateTime)}",
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+
                       const SizedBox(height: 12),
+
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () => widget.status == "Pending"
-                              ? _startTrip(trip)
-                              : _endTrip(trip),
+                          onPressed: !btnEnabled
+                              ? null
+                              : () => isPending ? _startTrip(trip) : _endTrip(trip),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: widget.status == "Pending" ? primaryColor : accentColor,
+                            backgroundColor: btnColor,
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: Text(
-                            widget.status == "Pending" ? "Start Trip" : "End Trip",
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            btnText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),

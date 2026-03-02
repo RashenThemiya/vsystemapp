@@ -6,6 +6,7 @@ class Trip {
   final String vehicleNumber;
   final String customerName;
   final String customerPhone;
+  final DateTime leavingDateTime;
 
   Trip({
     required this.tripId,
@@ -15,17 +16,23 @@ class Trip {
     required this.vehicleNumber,
     required this.customerName,
     required this.customerPhone,
+    required this.leavingDateTime,
+    re
   });
 
   factory Trip.fromJson(Map<String, dynamic> json) {
     return Trip(
-      tripId: json['trip_id'],
-      from: json['from_location'],
-      to: json['to_location'],
-      status: json['trip_status'],
-      vehicleNumber: json['vehicle']['vehicle_number'],
-      customerName: json['customer']['name'],
-      customerPhone: json['customer']['phone_number'],
+      tripId: json['trip_id'] ?? 0,
+      from: json['from_location'] ?? '',
+      to: json['to_location'] ?? '',
+      status: json['trip_status'] ?? '',
+
+      vehicleNumber: json['vehicle']?['vehicle_number'] ?? '',
+      customerName: json['customer']?['name'] ?? '',
+      customerPhone: json['customer']?['phone_number'] ?? '',
+
+      // ✅ FIXED KEY NAME
+      leavingDateTime: DateTime.parse(json['leaving_datetime']),
     );
   }
 }
